@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# claude-sandbox — run Claude Code in a GPU-capable Docker sandbox
+#
+# Install:
+#   cp claude-sandbox ~/.local/bin/
+#   # Put Dockerfile.claude-sandbox next to it or at ~/.config/claude-sandbox/Dockerfile
+#
+# Usage:
+#   claude-sandbox                    # run in current directory
+#   claude-sandbox --gpu              # with GPU passthrough
+#   claude-sandbox --resume           # resume last conversation
+#   claude-sandbox --resume <id>      # resume specific conversation
+#   claude-sandbox -p "do the thing"  # pass a prompt
+#
+# Any unrecognized flags are forwarded to `claude`.
+
+set -euo pipefail
+
+# ---------- config ----------
+IMAGE_NAME="claude-sandbox"
+SHM_SIZE="${CLAUDE_SANDBOX_SHM:-24g}"
+BASE_IMAGE="${CLAUDE_SANDBOX_BASE_IMAGE:-nvidia/cuda:12.6.3-runtime-ubuntu24.04}"
+
+# ---------- parse our flags vs claude flags ----------
+GPU_MODE=false
+CLAUDE_ARGS=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --gpu) GPU_MODE=true ;;
+    *)     CLAUDE_ARGS+=("$1") ;;
+  esac
+  shift
+done
+
+# ---------- locate Dockerfile ----------
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DOCKERFILE=""
+for candidate in \
+  "$SCRIPT_DIR/Dockerfile.claude-sandbox" \
+  "${XDG_CONFIG_HOME:-$HOME/.config}/claude-sandbox/Dockerfile" \
+  "$HOME/.claude/sandbox/Dockerfile"; do
+  if [ -f "$candidate" ]; then
+    DOCKERFILE="$candidate"
+    break
+  fi
+done
+
+if [ -z "$DOCKERFILE" ]; then
+  echo "Error: No Dockerfile found. Place Dockerfile.claude-sandbox next to this script"
+  echo "       or at ~/.config/claude-sandbox/Dockerfile"
+  exit 1
+fi
+
+# ---------- build image if needed ----------
+DOCKERFILE_HASH=$(sha256sum "$DOCKERFILE" | cut -c1-12)
+TAGGED_IMAGE="$IMAGE_NAME:$DOCKERFILE_HASH"
+
+if ! docker image inspect "$TAGGED_IMAGE" &>/dev/null; then
+  echo "Building sandbox image..."
+  docker build -t "$TAGGED_IMAGE" \
+    --build-arg "BASE_IMAGE=$BASE_IMAGE" \
+    -f "$DOCKERFILE" "$(dirname "$DOCKERFILE")"
+  # Also tag as latest for convenience
+  docker tag "$TAGGED_IMAGE" "$IMAGE_NAME:latest"
+fi
+
+# ---------- GPU flags ----------
+DOCKER_GPU_FLAGS=""
+if $GPU_MODE; then
+  DOCKER_GPU_FLAGS="--gpus all"
+fi
+
+# ---------- workspace path ----------
+# Use the real host path inside the container so Claude's project memory
+# is keyed per-project, not a shared /workspace bucket.
+HOST_DIR="$(pwd)"
+CONTAINER_DIR="$HOST_DIR"
+
+# ---------- run ----------
+exec docker run --rm -it \
+  -v "$HOST_DIR":"$CONTAINER_DIR" \
+  -v "$HOME/.claude":/home/ubuntu/.claude \
+  -v /etc/localtime:/etc/localtime:ro \
+  -w "$CONTAINER_DIR" \
+  --network host \
+  --shm-size="$SHM_SIZE" \
+  $DOCKER_GPU_FLAGS \
+  "$TAGGED_IMAGE" \
+  --dangerously-skip-permissions \
+  "${CLAUDE_ARGS[@]}"

@@ -25,7 +25,27 @@ Put `Dockerfile.claude-sandbox` in one of:
 - `~/.config/claude-sandbox/Dockerfile`
 - `~/.claude/sandbox/Dockerfile`
 
-Requires Docker. For `--gpu`, requires the NVIDIA Container Toolkit.
+Requires Docker. For `--gpu`, see the [GPU support](#gpu-support) section below.
+
+### GPU support
+
+`--gpu` requires the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/) installed on the host and registered with Docker:
+
+1. Install the host NVIDIA driver. Verify with `nvidia-smi`.
+2. Install the NVIDIA Container Toolkit:
+   - Arch: `pacman -S nvidia-container-toolkit`
+   - Debian/Ubuntu, Fedora/RHEL: install from NVIDIA's container-toolkit repo (per the upstream docs).
+3. Register the runtime with Docker and restart it:
+   ```sh
+   sudo nvidia-ctk runtime configure --runtime=docker
+   sudo systemctl restart docker
+   ```
+4. Sanity check:
+   ```sh
+   docker run --rm --gpus all nvidia/cuda:12.6.3-runtime-ubuntu24.04 nvidia-smi
+   ```
+
+The base image ships CUDA 12.6 runtime by default; the host driver must be new enough for that CUDA version. To change the base image, set `CLAUDE_SANDBOX_BASE_IMAGE`.
 
 ## Usage
 
@@ -37,9 +57,10 @@ claude-sandbox --resume           # resume last conversation
 claude-sandbox --resume <id>      # resume specific conversation
 claude-sandbox -p "do the thing"  # pass a prompt
 claude-sandbox --help             # wrapper-specific help
+claude-sandbox -- --help          # forward --help to claude itself
 ```
 
-Any flags not recognized by the wrapper are forwarded to `claude`. `--help` and `-h` are intercepted by the wrapper; for Claude's own help, run `claude --help` from inside the sandbox.
+Any flags not recognized by the wrapper are forwarded to `claude`. `--help` and `-h` are intercepted by the wrapper; use `--` as a sentinel to pass arguments straight through (e.g. `claude-sandbox -- --help` for Claude's own help).
 
 ### Networking
 

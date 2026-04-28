@@ -13,6 +13,7 @@
 #   claude-sandbox --resume <id>      # resume specific conversation
 #   claude-sandbox -p "do the thing"  # pass a prompt
 #   claude-sandbox --help             # show wrapper-specific help
+#   claude-sandbox -- --help          # forward --help to claude itself
 #
 # Networking: defaults to bridge. The container can reach host services via
 # the hostname `host.docker.internal`. Use --host-net to share the host's
@@ -42,15 +43,35 @@ Wrapper flags:
                      via host.docker.internal. Use this for tools that
                      bind to 127.0.0.1 / ::1 and can't be reconfigured.
   -h, --help         Show this message and exit.
+  --                 End of wrapper flags. Everything after is passed
+                     verbatim to claude (e.g. \`claude-sandbox -- --help\`
+                     to see Claude's own help).
 
 Environment:
   CLAUDE_SANDBOX_SHM         --shm-size for docker (default: 24g)
   CLAUDE_SANDBOX_BASE_IMAGE  Base image for build
                              (default: nvidia/cuda:12.6.3-runtime-ubuntu24.04)
 
+GPU support (--gpu):
+  Requires the NVIDIA Container Toolkit installed on the host and
+  registered with Docker. Typical setup:
+    1. Install the host NVIDIA driver (verify: \`nvidia-smi\`).
+    2. Install the NVIDIA Container Toolkit:
+         Arch:      pacman -S nvidia-container-toolkit
+         Debian/Ubuntu, Fedora/RHEL:
+                    install from NVIDIA's container-toolkit repo.
+    3. Register the runtime with Docker and restart it:
+         sudo nvidia-ctk runtime configure --runtime=docker
+         sudo systemctl restart docker
+    4. Sanity check:
+         docker run --rm --gpus all <some-cuda-image> nvidia-smi
+  The base image (CLAUDE_SANDBOX_BASE_IMAGE) ships CUDA 12.6 runtime
+  by default; the host driver must be new enough for that CUDA version.
+
 Any other flags are forwarded to \`claude\`. Examples:
   claude-sandbox --resume
   claude-sandbox --gpu -p "summarize this repo"
+  claude-sandbox -- --help        # see Claude's own CLI flags
 EOF
 }
 
@@ -64,6 +85,7 @@ while [ $# -gt 0 ]; do
     --gpu)      GPU_MODE=true ;;
     --host-net) HOST_NET=true ;;
     -h|--help)  usage; exit 0 ;;
+    --)         shift; CLAUDE_ARGS+=("$@"); break ;;
     *)          CLAUDE_ARGS+=("$1") ;;
   esac
   shift

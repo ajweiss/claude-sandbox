@@ -1,6 +1,6 @@
 # claude-sandbox
 
-Run [Claude Code](https://claude.com/claude-code) with `--dangerously-skip-permissions` inside a Docker container, so the agent works without interactive permission prompts. **The container is the point**: it bounds the blast radius enough to make disabling those prompts acceptable. If Claude (or something prompt-injected into it) does something you wouldn't have approved, the damage is contained to the container's view of the host — your project tree and `~/.claude` — instead of the rest of your machine.
+Run [Claude Code](https://claude.com/claude-code) in a Docker container with permission prompts disabled (`--dangerously-skip-permissions`).
 
 Your current directory is mounted at the same path inside the container, and `~/.claude` is shared so your login, project memory, and history persist across runs. Optional NVIDIA GPU passthrough.
 

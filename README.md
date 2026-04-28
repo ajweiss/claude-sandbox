@@ -36,9 +36,10 @@ claude-sandbox --host-net         # share the host's network namespace
 claude-sandbox --resume           # resume last conversation
 claude-sandbox --resume <id>      # resume specific conversation
 claude-sandbox -p "do the thing"  # pass a prompt
+claude-sandbox --help             # wrapper-specific help
 ```
 
-Any flags not recognized by the wrapper are forwarded to `claude`.
+Any flags not recognized by the wrapper are forwarded to `claude`. `--help` and `-h` are intercepted by the wrapper; for Claude's own help, run `claude --help` from inside the sandbox.
 
 ### Networking
 

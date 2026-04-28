@@ -12,6 +12,7 @@
 #   claude-sandbox --resume           # resume last conversation
 #   claude-sandbox --resume <id>      # resume specific conversation
 #   claude-sandbox -p "do the thing"  # pass a prompt
+#   claude-sandbox --help             # show wrapper-specific help
 #
 # Networking: defaults to bridge. The container can reach host services via
 # the hostname `host.docker.internal`. Use --host-net to share the host's
@@ -26,6 +27,33 @@ IMAGE_NAME="claude-sandbox"
 SHM_SIZE="${CLAUDE_SANDBOX_SHM:-24g}"
 BASE_IMAGE="${CLAUDE_SANDBOX_BASE_IMAGE:-nvidia/cuda:12.6.3-runtime-ubuntu24.04}"
 
+# ---------- usage ----------
+usage() {
+  cat <<EOF
+claude-sandbox — run Claude Code in a Docker sandbox
+
+Usage:
+  claude-sandbox [WRAPPER FLAGS] [CLAUDE FLAGS]
+
+Wrapper flags:
+  --gpu              Pass NVIDIA GPUs through to the container.
+  --host-net         Share the host's network namespace.
+                     Default is bridge networking; reach host services
+                     via host.docker.internal. Use this for tools that
+                     bind to 127.0.0.1 / ::1 and can't be reconfigured.
+  -h, --help         Show this message and exit.
+
+Environment:
+  CLAUDE_SANDBOX_SHM         --shm-size for docker (default: 24g)
+  CLAUDE_SANDBOX_BASE_IMAGE  Base image for build
+                             (default: nvidia/cuda:12.6.3-runtime-ubuntu24.04)
+
+Any other flags are forwarded to \`claude\`. Examples:
+  claude-sandbox --resume
+  claude-sandbox --gpu -p "summarize this repo"
+EOF
+}
+
 # ---------- parse our flags vs claude flags ----------
 GPU_MODE=false
 HOST_NET=false
@@ -35,6 +63,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --gpu)      GPU_MODE=true ;;
     --host-net) HOST_NET=true ;;
+    -h|--help)  usage; exit 0 ;;
     *)          CLAUDE_ARGS+=("$1") ;;
   esac
   shift

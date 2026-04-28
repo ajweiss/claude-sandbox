@@ -6,11 +6,16 @@
 #   # Put Dockerfile.claude-sandbox next to it or at ~/.config/claude-sandbox/Dockerfile
 #
 # Usage:
-#   claude-sandbox                    # run in current directory
+#   claude-sandbox                    # run in current directory (bridge networking)
 #   claude-sandbox --gpu              # with GPU passthrough
+#   claude-sandbox --host-net         # use host networking (loopback exposed)
 #   claude-sandbox --resume           # resume last conversation
 #   claude-sandbox --resume <id>      # resume specific conversation
 #   claude-sandbox -p "do the thing"  # pass a prompt
+#
+# Networking: defaults to bridge. The container can reach host services via
+# the hostname `host.docker.internal`. Use --host-net to share the host's
+# network namespace (needed e.g. when something binds to ::1 / 127.0.0.1).
 #
 # Any unrecognized flags are forwarded to `claude`.
 
@@ -23,12 +28,14 @@ BASE_IMAGE="${CLAUDE_SANDBOX_BASE_IMAGE:-nvidia/cuda:12.6.3-runtime-ubuntu24.04}
 
 # ---------- parse our flags vs claude flags ----------
 GPU_MODE=false
+HOST_NET=false
 CLAUDE_ARGS=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --gpu) GPU_MODE=true ;;
-    *)     CLAUDE_ARGS+=("$1") ;;
+    --gpu)      GPU_MODE=true ;;
+    --host-net) HOST_NET=true ;;
+    *)          CLAUDE_ARGS+=("$1") ;;
   esac
   shift
 done
@@ -65,11 +72,35 @@ if ! docker image inspect "$TAGGED_IMAGE" &>/dev/null; then
   docker tag "$TAGGED_IMAGE" "$IMAGE_NAME:latest"
 fi
 
-# ---------- GPU flags ----------
-DOCKER_GPU_FLAGS=""
+# ---------- docker flags ----------
+DOCKER_GPU_ARGS=()
 if $GPU_MODE; then
-  DOCKER_GPU_FLAGS="--gpus all"
+  DOCKER_GPU_ARGS+=(--gpus all)
 fi
+
+DOCKER_NET_ARGS=()
+if $HOST_NET; then
+  DOCKER_NET_ARGS+=(--network host)
+else
+  # Default bridge networking. Expose host services by hostname rather than
+  # by sharing the host's loopback interface.
+  DOCKER_NET_ARGS+=(--add-host host.docker.internal:host-gateway)
+fi
+
+DOCKER_SECURITY_ARGS=(
+  --security-opt=no-new-privileges
+  --cap-drop=ALL
+)
+
+# Mount ~/.claude read-write for credentials, memory, transcripts, etc.,
+# but layer specific subpaths read-only on top to block hook/plugin
+# poisoning attacks against future host or sandbox runs.
+DOCKER_RO_OVERLAYS=()
+for entry in settings.json settings.local.json agents commands hooks plugins; do
+  if [ -e "$HOME/.claude/$entry" ]; then
+    DOCKER_RO_OVERLAYS+=(-v "$HOME/.claude/$entry:/home/ubuntu/.claude/$entry:ro")
+  fi
+done
 
 # ---------- workspace path ----------
 # Use the real host path inside the container so Claude's project memory
@@ -81,11 +112,13 @@ CONTAINER_DIR="$HOST_DIR"
 exec docker run --rm -it \
   -v "$HOST_DIR":"$CONTAINER_DIR" \
   -v "$HOME/.claude":/home/ubuntu/.claude \
+  "${DOCKER_RO_OVERLAYS[@]}" \
   -v /etc/localtime:/etc/localtime:ro \
   -w "$CONTAINER_DIR" \
-  --network host \
   --shm-size="$SHM_SIZE" \
-  $DOCKER_GPU_FLAGS \
+  "${DOCKER_NET_ARGS[@]}" \
+  "${DOCKER_SECURITY_ARGS[@]}" \
+  "${DOCKER_GPU_ARGS[@]}" \
   "$TAGGED_IMAGE" \
   --dangerously-skip-permissions \
   "${CLAUDE_ARGS[@]}"

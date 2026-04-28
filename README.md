@@ -30,14 +30,23 @@ Requires Docker. For `--gpu`, requires the NVIDIA Container Toolkit.
 ## Usage
 
 ```sh
-claude-sandbox                    # run in current directory
+claude-sandbox                    # run in current directory (bridge networking)
 claude-sandbox --gpu              # with GPU passthrough
+claude-sandbox --host-net         # share the host's network namespace
 claude-sandbox --resume           # resume last conversation
 claude-sandbox --resume <id>      # resume specific conversation
 claude-sandbox -p "do the thing"  # pass a prompt
 ```
 
 Any flags not recognized by the wrapper are forwarded to `claude`.
+
+### Networking
+
+The container uses **bridge networking by default**, so `127.0.0.1` and `::1` inside the container are the container's own loopback — not the host's. Host services aren't reachable on `localhost` from inside.
+
+To reach a service running on the host, use the hostname `host.docker.internal` (the wrapper wires this up automatically). For example, `http://host.docker.internal:11434` for Ollama.
+
+If you genuinely need host networking — for instance, an MCP server or other tool that only binds to `127.0.0.1` and you can't change it — pass `--host-net`. That restores the previous behavior and exposes the host's loopback to the container.
 
 ## Configuration
 
@@ -51,21 +60,39 @@ Environment variables:
 ## What gets mounted
 
 - `$(pwd)` → same path inside the container (so Claude's per-project memory keys correctly)
-- `$HOME/.claude` → `/home/ubuntu/.claude`
+- `$HOME/.claude` → `/home/ubuntu/.claude` (read-write, with read-only overlays — see below)
 - `/etc/localtime` (read-only)
 
-The container uses `--network host`.
+### Read-only overlays inside `~/.claude`
+
+The base `~/.claude` mount is read-write so credentials, project memory, transcripts, and history persist. On top of that, the wrapper layers read-only bind mounts over the paths that double as code/instruction-execution surfaces:
+
+- `settings.json`, `settings.local.json`
+- `agents/`, `commands/`, `hooks/`, `plugins/`
+
+Each is mounted only if it exists on the host. This blocks the main host-impacting attack: a compromised agent inside the sandbox writing a poisoned hook, slash command, subagent definition, or plugin that fires the next time you run Claude (sandboxed or otherwise) on this host.
+
+Trade-off: you can't install plugins, edit settings, or author new slash commands / subagents *from inside the sandbox*. Do those from a host shell.
+
+## Container hardening
+
+The wrapper applies a few defaults to keep the blast radius down:
+
+- `--security-opt=no-new-privileges` — blocks setuid- and file-cap-based privilege escalation inside the container.
+- `--cap-drop=ALL` — drops all Linux capabilities. Claude runs as a regular user (`ubuntu`), so it doesn't need any.
+- Bridge networking by default (see above).
+- Read-only overlays on `~/.claude` execution surfaces (see above).
 
 ## Security note
 
-This is **workflow isolation, not a security boundary.** The container has:
+This is **workflow isolation, not a security boundary.** Even with the hardening above, the container still has:
 
 - Your working directory mounted read-write
-- Your `~/.claude` mounted read-write (credentials, history, settings)
-- Host networking
+- Read access to all of `~/.claude`, including credentials, transcripts, and history
 - `--dangerously-skip-permissions` enabled for Claude
+- A shared kernel with the host (it's a container, not a VM)
 
-Don't run it against code or instructions you don't trust. If you need a real boundary, run it on a disposable VM.
+A compromised agent can still read your Claude credentials and read/write anything in the project tree. The read-only overlays prevent it from installing a hook that fires on your host, but they don't prevent exfiltration. Don't run it against code or instructions you don't trust. If you need a real boundary, run it on a disposable VM (Incus, QEMU, a cloud instance) or a VM-per-container runtime like Kata Containers.
 
 ## License
 

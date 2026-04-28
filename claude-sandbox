@@ -53,20 +53,8 @@ Environment:
                              (default: nvidia/cuda:12.6.3-runtime-ubuntu24.04)
 
 GPU support (--gpu):
-  Requires the NVIDIA Container Toolkit installed on the host and
-  registered with Docker. Typical setup:
-    1. Install the host NVIDIA driver (verify: \`nvidia-smi\`).
-    2. Install the NVIDIA Container Toolkit:
-         Arch:      pacman -S nvidia-container-toolkit
-         Debian/Ubuntu, Fedora/RHEL:
-                    install from NVIDIA's container-toolkit repo.
-    3. Register the runtime with Docker and restart it:
-         sudo nvidia-ctk runtime configure --runtime=docker
-         sudo systemctl restart docker
-    4. Sanity check:
-         docker run --rm --gpus all <some-cuda-image> nvidia-smi
-  The base image (CLAUDE_SANDBOX_BASE_IMAGE) ships CUDA 12.6 runtime
-  by default; the host driver must be new enough for that CUDA version.
+  Requires the NVIDIA driver and the NVIDIA Container Toolkit on the
+  host, registered with Docker. See the README for setup steps.
 
 Any other flags are forwarded to \`claude\`. Examples:
   claude-sandbox --resume

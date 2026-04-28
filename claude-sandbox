@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# claude-sandbox — run Claude Code in a GPU-capable Docker sandbox
+# claude-sandbox — run Claude Code in a Docker container with
+# --dangerously-skip-permissions, so the agent works without
+# interactive permission prompts. The container bounds the blast
+# radius. Optional NVIDIA GPU passthrough.
 #
 # Install:
 #   cp claude-sandbox ~/.local/bin/
@@ -31,7 +34,11 @@ BASE_IMAGE="${CLAUDE_SANDBOX_BASE_IMAGE:-nvidia/cuda:12.6.3-runtime-ubuntu24.04}
 # ---------- usage ----------
 usage() {
   cat <<EOF
-claude-sandbox — run Claude Code in a Docker sandbox
+claude-sandbox — run Claude Code in a Docker container with
+--dangerously-skip-permissions, so the agent works without
+interactive permission prompts. The container is what makes that
+acceptable: it bounds the blast radius if Claude (or something
+prompt-injected into it) does something you wouldn't have approved.
 
 Usage:
   claude-sandbox [WRAPPER FLAGS] [CLAUDE FLAGS]

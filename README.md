@@ -127,14 +127,23 @@ The wrapper applies a few defaults to keep the blast radius down:
 
 ## Security note
 
-This is **workflow isolation, not a security boundary.** Even with the hardening above, the container still has:
+This is **workflow isolation, not a security boundary** by default. Even with the hardening above, the container still has:
 
 - Your working directory mounted read-write
 - Read access to all of `~/.claude`, including credentials, transcripts, and history
 - `--dangerously-skip-permissions` enabled for Claude
-- A shared kernel with the host (it's a container, not a VM)
 
-A compromised agent can still read your Claude credentials and read/write anything in the project tree. The read-only overlays prevent it from installing a hook that fires on your host, but they don't prevent exfiltration. Don't run it against code or instructions you don't trust. If you need a real boundary, run it on a disposable VM (Incus, QEMU, a cloud instance) or a VM-per-container runtime like Kata Containers.
+A compromised agent can read your Claude credentials and read/write anything in the project tree. The read-only overlays prevent it from installing a hook that fires on your host, but they don't prevent exfiltration. Don't run it against code or instructions you don't trust.
+
+### Kernel boundary
+
+By default, the container shares its kernel with the host. A container escape (kernel exploit, container-runtime bug) reaches the host. The platform you're running on changes how much that matters:
+
+- **macOS / Windows**: Docker Desktop runs the daemon inside a Linux VM, so the host kernel is *already* isolated by a VM boundary. The shared-kernel concern doesn't really apply on these platforms.
+- **Linux, default runtime (`runc`)**: shared kernel with your host. The mitigations in [Container hardening](#container-hardening) reduce the surface but don't eliminate it.
+- **Linux, `--microvm`**: each `docker run` boots a small KVM microVM via [Kata Containers](https://katacontainers.io/), and the container runs inside that VM. Now there's a real kernel boundary between the agent and your host. This addresses the shared-kernel problem; it doesn't change the credentials/project-tree exposure listed above.
+
+If you're running untrusted code or instructions on Linux and want the strongest available boundary, use `--microvm` (or `CLAUDE_SANDBOX_RUNTIME=kata`). For the strongest possible isolation, run the whole sandbox on a disposable VM or cloud instance — that limits even credential and project-tree exposure to a throwaway environment.
 
 ## License
 

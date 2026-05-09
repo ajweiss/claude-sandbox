@@ -53,6 +53,7 @@ The base image ships CUDA 12.6 runtime by default; the host driver must be new e
 claude-sandbox                    # run in current directory (bridge networking)
 claude-sandbox --gpu              # with GPU passthrough
 claude-sandbox --host-net         # share the host's network namespace
+claude-sandbox --microvm          # use Kata Containers as the runtime (Linux)
 claude-sandbox --resume           # resume last conversation
 claude-sandbox --resume <id>      # resume specific conversation
 claude-sandbox -p "do the thing"  # pass a prompt
@@ -78,6 +79,7 @@ Environment variables:
 | --- | --- | --- |
 | `CLAUDE_SANDBOX_SHM` | `24g` | `--shm-size` passed to Docker |
 | `CLAUDE_SANDBOX_BASE_IMAGE` | `nvidia/cuda:12.6.3-runtime-ubuntu24.04` | Base image for the build |
+| `CLAUDE_SANDBOX_RUNTIME` | unset | Docker runtime to pass via `--runtime` (e.g. `kata`, `runsc`). Lets you make a microVM / userspace-kernel runtime your default without typing `--microvm` each time. |
 
 ## What gets mounted
 
@@ -96,6 +98,23 @@ The base `~/.claude` mount is read-write so credentials, project memory, transcr
 Each is mounted only if it exists on the host. This blocks the main host-impacting attack: a compromised agent inside the sandbox writing a poisoned hook, slash command, subagent definition, or plugin that fires the next time you run Claude (sandboxed or otherwise) on this host.
 
 Trade-off: you can't install plugins, edit settings, or author new slash commands / subagents *from inside the sandbox*. Do those from a host shell.
+
+## microVM isolation (`--microvm`)
+
+The default container shares its kernel with your host. If you want a real KVM boundary instead, pass `--microvm` (or set `CLAUDE_SANDBOX_RUNTIME=kata`). The wrapper then asks Docker to use [Kata Containers](https://katacontainers.io/) as the runtime — `docker run` boots a small KVM microVM, the container runs inside it, and the workflow otherwise stays the same.
+
+This is **Linux only.** On macOS and Windows, Docker Desktop already runs the daemon inside a Linux VM, so containers are *already* isolated from the host kernel by a VM boundary; adding Kata on top would be VM-in-VM and pointless.
+
+Setup on the host (Linux):
+
+1. Install Kata (e.g. `pacman -S kata-containers` on Arch; check your distro for equivalents).
+2. Make sure `/dev/kvm` is accessible (CPU virtualization on; nested virt enabled if you're already in a VM).
+3. Register the runtime with Docker by adding a `runtimes` entry to `/etc/docker/daemon.json` and restarting Docker. Sanity check:
+   ```sh
+   docker run --rm --runtime=kata hello-world
+   ```
+
+GPU + microVM caveat: Kata's stock guest image doesn't include NVIDIA drivers, and host-side GPU passthrough needs `intel_iommu=on` / `amd_iommu=on` and the GPU bound to `vfio-pci`. If you have one GPU shared with your desktop, that's awkward; a dedicated compute GPU makes it tolerable. See the Kata docs for the full setup.
 
 ## Container hardening
 

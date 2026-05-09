@@ -143,6 +143,15 @@ for entry in settings.json settings.local.json agents commands hooks plugins; do
   fi
 done
 
+# ~/.claude.json (account, subscription, oauth identity, project list,
+# onboarding state) is a sibling of ~/.claude/, not inside it. Without
+# it Claude can't tell which account the credentials file belongs to
+# and re-runs the OAuth flow on every startup. Mount it RW.
+EXTRA_MOUNTS=()
+if [ -f "$HOME/.claude.json" ]; then
+  EXTRA_MOUNTS+=(-v "$HOME/.claude.json:/home/ubuntu/.claude.json")
+fi
+
 # ---------- workspace path ----------
 # Use the real host path inside the container so Claude's project memory
 # is keyed per-project, not a shared /workspace bucket.
@@ -154,6 +163,7 @@ exec docker run --rm -it \
   -v "$HOST_DIR":"$CONTAINER_DIR" \
   -v "$HOME/.claude":/home/ubuntu/.claude \
   "${DOCKER_RO_OVERLAYS[@]}" \
+  "${EXTRA_MOUNTS[@]}" \
   -v /etc/localtime:/etc/localtime:ro \
   -w "$CONTAINER_DIR" \
   --shm-size="$SHM_SIZE" \

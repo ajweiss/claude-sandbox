@@ -83,6 +83,7 @@ Environment variables:
 
 - `$(pwd)` → same path inside the container (so Claude's per-project memory keys correctly)
 - `$HOME/.claude` → `/home/ubuntu/.claude` (read-write, with read-only overlays — see below)
+- `$HOME/.claude.json` → `/home/ubuntu/.claude.json` (read-write, if present). This sibling of `~/.claude/` holds account, subscription, and onboarding state; without it Claude re-runs the OAuth flow on every startup.
 - `/etc/localtime` (read-only)
 
 ### Read-only overlays inside `~/.claude`

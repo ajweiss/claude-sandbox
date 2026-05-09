@@ -14,7 +14,7 @@ Your current directory is mounted at the same path inside the container, and `~/
 ## Install
 
 ```sh
-git clone https://github.com/YOUR-USER/claude-sandbox.git
+git clone https://github.com/ajweiss/claude-sandbox.git
 cd claude-sandbox
 cp claude-sandbox ~/.local/bin/
 ```

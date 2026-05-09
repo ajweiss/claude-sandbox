@@ -2,7 +2,7 @@
 
 Run [Claude Code](https://claude.com/claude-code) in a Docker container with permission prompts disabled (`--dangerously-skip-permissions`).
 
-Your current directory is mounted at the same path inside the container, and `~/.claude` is shared so your login, project memory, and history persist across runs. Optional NVIDIA GPU passthrough.
+Your current directory is mounted at the same path inside the container, and `~/.claude` is shared so your login, project memory, and history persist across runs — with read-only overlays on the hook/plugin/command paths (`settings.json`, `agents/`, `commands/`, `hooks/`, `plugins/`) so a compromised sandbox run can't poison them for later host runs. Optional NVIDIA GPU passthrough.
 
 ## What you get
 

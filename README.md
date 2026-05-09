@@ -54,6 +54,8 @@ claude-sandbox                    # run in current directory (bridge networking)
 claude-sandbox --gpu              # with GPU passthrough
 claude-sandbox --host-net         # share the host's network namespace
 claude-sandbox --microvm          # use Kata Containers as the runtime (Linux)
+claude-sandbox --usb=usrp         # pass through one matched USB device
+claude-sandbox --usb-all          # pass through every USB device (broad!)
 claude-sandbox --resume           # resume last conversation
 claude-sandbox --resume <id>      # resume specific conversation
 claude-sandbox -p "do the thing"  # pass a prompt
@@ -115,6 +117,35 @@ Setup on the host (Linux):
    ```
 
 GPU + microVM caveat: Kata's stock guest image doesn't include NVIDIA drivers, and host-side GPU passthrough needs `intel_iommu=on` / `amd_iommu=on` and the GPU bound to `vfio-pci`. If you have one GPU shared with your desktop, that's awkward; a dedicated compute GPU makes it tolerable. See the Kata docs for the full setup.
+
+## USB passthrough
+
+For workflows that need to talk to a hardware device — flashing a board, reading from an SDR, programming a microcontroller — the wrapper has three opt-in flags. All are Linux-only.
+
+| Flag | What it does |
+| --- | --- |
+| `--usb=<pattern>` | Case-insensitive substring match against the manufacturer/product strings in `lsusb` output. Errors on 0 or >1 matches. |
+| `--usb-vid-pid=<vid>:<pid>` | Exact match against the USB vendor:product ID (4-digit hex each). |
+| `--usb-all` | Pass through `/dev/bus/usb` — every USB device on the host. |
+
+Examples:
+
+```sh
+claude-sandbox --usb=usrp           # one Ettus USRP plugged in
+claude-sandbox --usb-vid-pid=2500:0020   # same, by ID
+claude-sandbox --usb-all            # broad — see security note
+```
+
+Resolution uses `lsusb` from `usbutils`; install that if it's missing on your host.
+
+### Security note for USB passthrough
+
+Once a device is exposed to the container, the agent can talk to it. Concretely:
+
+- **`--usb=<pattern>` and `--usb-vid-pid`** expose only the matched device(s). Surgical, low blast radius. The pattern match isn't an identity check — a device can claim any descriptor strings — but for typical hardware that's not an attack you need to model.
+- **`--usb-all`** exposes everything plugged in: USB drives, phones with debugging on, webcams, microphones, USB-serial consoles, security keys, hardware programmers. Treat this flag as "I am the only thing plugged in right now, or I trust the agent with everything that is."
+
+The `--cap-drop=ALL` default blocks the worst USB attacks (e.g., detaching kernel drivers to keylog a USB keyboard) since those need `CAP_SYS_RAWIO`. It does *not* block ordinary libusb access to devices with permissive udev rules — which covers most consumer/dev hardware.
 
 ## Container hardening
 

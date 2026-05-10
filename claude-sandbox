@@ -216,24 +216,36 @@ $USB_ALL && DOCKER_USB_ARGS+=(--device=/dev/bus/usb)
 [ -n "$USB_PATTERN" ] && resolve_usb "--usb=$USB_PATTERN" pattern "$USB_PATTERN"
 [ -n "$USB_VID_PID" ] && resolve_usb "--usb-vid-pid=$USB_VID_PID" vidpid "$USB_VID_PID"
 
+# Pre-create host-side mount targets so every bind mount applies from
+# the very first sandbox run on a fresh host. Without these, Docker
+# would auto-create the source paths as empty dirs (wrong type for file
+# mounts), and the RO overlays would silently no-op until something
+# wrote to the parent RW mount. `touch` is idempotent and avoids the
+# TOCTOU race that a check-then-write would have if host Claude is
+# initializing the same files concurrently.
+mkdir -p "$HOME/.claude" \
+         "$HOME/.claude/agents" \
+         "$HOME/.claude/commands" \
+         "$HOME/.claude/hooks" \
+         "$HOME/.claude/plugins"
+touch    "$HOME/.claude/settings.json" \
+         "$HOME/.claude/settings.local.json" \
+         "$HOME/.claude.json"
+chmod 600 "$HOME/.claude.json"
+
 # Mount ~/.claude read-write for credentials, memory, transcripts, etc.,
 # but layer specific subpaths read-only on top to block hook/plugin
 # poisoning attacks against future host or sandbox runs.
 DOCKER_RO_OVERLAYS=()
 for entry in settings.json settings.local.json agents commands hooks plugins; do
-  if [ -e "$HOME/.claude/$entry" ]; then
-    DOCKER_RO_OVERLAYS+=(-v "$HOME/.claude/$entry:/home/ubuntu/.claude/$entry:ro")
-  fi
+  DOCKER_RO_OVERLAYS+=(-v "$HOME/.claude/$entry:/home/ubuntu/.claude/$entry:ro")
 done
 
 # ~/.claude.json (account, subscription, oauth identity, project list,
 # onboarding state) is a sibling of ~/.claude/, not inside it. Without
 # it Claude can't tell which account the credentials file belongs to
 # and re-runs the OAuth flow on every startup. Mount it RW.
-EXTRA_MOUNTS=()
-if [ -f "$HOME/.claude.json" ]; then
-  EXTRA_MOUNTS+=(-v "$HOME/.claude.json:/home/ubuntu/.claude.json")
-fi
+EXTRA_MOUNTS=(-v "$HOME/.claude.json:/home/ubuntu/.claude.json")
 
 # ---------- workspace path ----------
 # Use the real host path inside the container so Claude's project memory

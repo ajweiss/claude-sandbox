@@ -11,6 +11,7 @@
 #   claude-sandbox --gpu              # with GPU passthrough
 #   claude-sandbox --host-net         # use host networking (loopback exposed)
 #   claude-sandbox --microvm          # use Kata as the Docker runtime (Linux)
+#   claude-sandbox --rebuild          # force a fresh (--no-cache) image build
 #   claude-sandbox --usb=usrp         # pass through one matched USB device
 #   claude-sandbox --usb-all          # pass through every USB device
 #   claude-sandbox --resume           # resume last conversation
@@ -53,6 +54,11 @@ Wrapper flags:
                      registered with Docker. GPU + Kata also requires
                      IOMMU/VFIO on the host and a Kata guest image with
                      NVIDIA drivers; see the README.
+  --rebuild          Force a fresh image build with --no-cache before
+                     running. Use this to pick up a new Claude release:
+                     the CLI is installed from claude.ai/install.sh at
+                     build time, and the normal cached build would
+                     otherwise keep the previously baked-in version.
   --usb=<pattern>    Pass through one USB device whose manufacturer or
                      product string contains <pattern> (case-insensitive
                      substring). Errors if 0 or >1 devices match.
@@ -94,6 +100,7 @@ EOF
 GPU_MODE=false
 HOST_NET=false
 MICROVM=false
+REBUILD=false
 USB_ALL=false
 USB_PATTERN=""
 USB_VID_PID=""
@@ -104,6 +111,7 @@ while [ $# -gt 0 ]; do
     --gpu)              GPU_MODE=true ;;
     --host-net)         HOST_NET=true ;;
     --microvm)          MICROVM=true ;;
+    --rebuild)          REBUILD=true ;;
     --usb-all)          USB_ALL=true ;;
     --usb=*)            USB_PATTERN="${1#--usb=}" ;;
     --usb-vid-pid=*)    USB_VID_PID="${1#--usb-vid-pid=}" ;;
@@ -172,9 +180,18 @@ fi
 DOCKERFILE_HASH=$(sha256sum "$DOCKERFILE" | cut -c1-12)
 TAGGED_IMAGE="$IMAGE_NAME:$DOCKERFILE_HASH"
 
-if ! docker image inspect "$TAGGED_IMAGE" &>/dev/null; then
-  echo "Building sandbox image..."
-  docker build -t "$TAGGED_IMAGE" \
+if $REBUILD || ! docker image inspect "$TAGGED_IMAGE" &>/dev/null; then
+  # --rebuild forces --no-cache so the claude.ai/install.sh layer re-runs
+  # and picks up the latest Claude release; otherwise Docker's layer cache
+  # would re-bake the previously installed version even on a rebuild.
+  BUILD_CACHE_ARGS=()
+  if $REBUILD; then
+    echo "Rebuilding sandbox image (--no-cache)..."
+    BUILD_CACHE_ARGS+=(--no-cache)
+  else
+    echo "Building sandbox image..."
+  fi
+  docker build "${BUILD_CACHE_ARGS[@]}" -t "$TAGGED_IMAGE" \
     --build-arg "BASE_IMAGE=$BASE_IMAGE" \
     -f "$DOCKERFILE" "$(dirname "$DOCKERFILE")"
   # Also tag as latest for convenience

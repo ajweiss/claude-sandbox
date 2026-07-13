@@ -56,6 +56,7 @@ claude-sandbox --host-net         # share the host's network namespace
 claude-sandbox --microvm          # use Kata Containers as the runtime (Linux)
 claude-sandbox --usb=usrp         # pass through one matched USB device
 claude-sandbox --usb-all          # pass through every USB device (broad!)
+claude-sandbox --rebuild          # force a fresh (--no-cache) image build
 claude-sandbox --resume           # resume last conversation
 claude-sandbox --resume <id>      # resume specific conversation
 claude-sandbox -p "do the thing"  # pass a prompt
@@ -64,6 +65,10 @@ claude-sandbox -- --help          # forward --help to claude itself
 ```
 
 Any flags not recognized by the wrapper are forwarded to `claude`. `--help` and `-h` are intercepted by the wrapper; use `--` as a sentinel to pass arguments straight through (e.g. `claude-sandbox -- --help` for Claude's own help).
+
+### Updating Claude
+
+The image is built once and reused; the tag is keyed on a hash of the Dockerfile, so an unchanged Dockerfile never triggers a rebuild. Claude itself is installed from `claude.ai/install.sh` at build time, so the version is frozen to whatever was latest when the image was first built. To pull the latest Claude release, pass `--rebuild`. It runs `docker build --no-cache`, which re-executes the install step (a plain rebuild would otherwise reuse Docker's cached layer and re-bake the same version).
 
 ### Networking
 

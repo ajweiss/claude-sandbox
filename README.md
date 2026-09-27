@@ -102,7 +102,7 @@ The base `~/.claude` mount is read-write so credentials, project memory, transcr
 - `settings.json`, `settings.local.json`
 - `agents/`, `commands/`, `hooks/`, `plugins/`
 
-Each is mounted only if it exists on the host. This blocks the main host-impacting attack: a compromised agent inside the sandbox writing a poisoned hook, slash command, subagent definition, or plugin that fires the next time you run Claude (sandboxed or otherwise) on this host.
+The wrapper pre-creates any of these that are missing on the host (as empty files/dirs) so the overlays apply from the very first run. This blocks the main host-impacting attack: a compromised agent inside the sandbox writing a poisoned hook, slash command, subagent definition, or plugin that fires the next time you run Claude (sandboxed or otherwise) on this host.
 
 Trade-off: you can't install plugins, edit settings, or author new slash commands / subagents *from inside the sandbox*. Do those from a host shell.
 

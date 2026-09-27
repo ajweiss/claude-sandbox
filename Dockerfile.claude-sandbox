@@ -17,11 +17,20 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # just command runner
 RUN curl -fsSL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
 
-# Match host user so file ownership isn't root
+# Match host user so file ownership isn't root. Ubuntu 24.04 base images
+# already ship an `ubuntu` user at 1000:1000, so remap it when it exists
+# instead of relying on useradd (which would fail and leave the UID wrong
+# for hosts where the invoking user isn't 1000).
 ARG UID=1000
 ARG GID=1000
-RUN groupadd -g $GID claude 2>/dev/null || true \
-    && useradd -m -u $UID -g $GID -s /bin/bash ubuntu 2>/dev/null || true
+RUN if getent passwd ubuntu >/dev/null; then \
+        groupmod -g "$GID" ubuntu \
+        && usermod -u "$UID" -g "$GID" ubuntu; \
+    else \
+        groupadd -g "$GID" ubuntu \
+        && useradd -m -u "$UID" -g "$GID" -s /bin/bash ubuntu; \
+    fi \
+    && chown -R "$UID:$GID" /home/ubuntu
 
 USER ubuntu
 RUN curl -LsSf https://astral.sh/uv/install.sh | bash

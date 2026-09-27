@@ -193,6 +193,8 @@ if $REBUILD || ! docker image inspect "$TAGGED_IMAGE" &>/dev/null; then
   fi
   docker build "${BUILD_CACHE_ARGS[@]}" -t "$TAGGED_IMAGE" \
     --build-arg "BASE_IMAGE=$BASE_IMAGE" \
+    --build-arg "UID=$(id -u)" \
+    --build-arg "GID=$(id -g)" \
     -f "$DOCKERFILE" "$(dirname "$DOCKERFILE")"
   # Also tag as latest for convenience
   docker tag "$TAGGED_IMAGE" "$IMAGE_NAME:latest"
